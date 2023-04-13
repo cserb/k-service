@@ -25,7 +25,7 @@ if (!smartContractAddress || !privateKey) {
 
 // const provider = new ethers.InfuraProvider('goerli');
 // create a local provider
-const provider = new ethers.AlchemyProvider('sepolia', alchemyApiKey);
+const provider = new ethers.AlchemyProvider('goerli', alchemyApiKey);
 const wallet = new ethers.Wallet(privateKey, provider);
 
 const abi = [
@@ -68,7 +68,7 @@ async function main() {
 
   // get up to date
   console.log('Fetching past events...');
-  await fetchPastPingEvents(contract, 3282653);
+  await fetchPastPingEvents(contract, 8823865);
   // listen for new events
   console.log('Listening for events...');
   contract.on('Ping', async (eventPayload: ethers.ContractEventPayload) => {
