@@ -16,6 +16,7 @@ dotenv.config();
 
 const smartContractAddress = process.env.SMART_CONTRACT_ADDRESS;
 const privateKey = process.env.PRIVATE_KEY;
+const alchemyApiKey = process.env.ALCHEMY_API_KEY;
 
 if (!smartContractAddress || !privateKey) {
   console.error('Please set SMART_CONTRACT_ADDRESS, and PRIVATE_KEY in the .env file');
@@ -24,7 +25,7 @@ if (!smartContractAddress || !privateKey) {
 
 // const provider = new ethers.InfuraProvider('goerli');
 // create a local provider
-const provider = new ethers.JsonRpcProvider('sepolia');
+const provider = new ethers.AlchemyProvider('sepolia', alchemyApiKey);
 const wallet = new ethers.Wallet(privateKey, provider);
 
 const abi = [
