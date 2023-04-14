@@ -18,13 +18,11 @@ const smartContractAddress = process.env.SMART_CONTRACT_ADDRESS;
 const privateKey = process.env.PRIVATE_KEY;
 const alchemyApiKey = process.env.ALCHEMY_API_KEY;
 
-if (!smartContractAddress || !privateKey) {
-  console.error('Please set SMART_CONTRACT_ADDRESS, and PRIVATE_KEY in the .env file');
+if (!smartContractAddress || !privateKey || !alchemyApiKey) {
+  console.error('Please set all ENV variables in the .env file');
   process.exit(1);
 }
 
-// const provider = new ethers.InfuraProvider('goerli');
-// create a local provider
 const provider = new ethers.AlchemyProvider('goerli', alchemyApiKey);
 const wallet = new ethers.Wallet(privateKey, provider);
 
@@ -39,24 +37,34 @@ const abi = [
 
 const contract = new ethers.Contract(smartContractAddress, abi, provider);
 
-
-async function fetchPastPingEvents(contract: ethers.Contract, fromBlock: number): Promise<void> {
+export async function fetchPastPingEvents(contract: ethers.Contract, fromBlock: number): Promise<void> {
   const currentBlockNumber = await provider.getBlockNumber();
+
   const pingFilter = contract.filters.Ping();
+  const pastPings = await contract.queryFilter(
+    pingFilter, fromBlock, currentBlockNumber
+  );
 
-  const pastPings = await contract.queryFilter(pingFilter, fromBlock, currentBlockNumber);
   const filterPong = contract.filters.Pong();
-  const pastPongs = await contract.queryFilter(filterPong, fromBlock, currentBlockNumber);
-
+  const pastPongs = await contract.queryFilter(
+    filterPong, fromBlock, currentBlockNumber
+  );
 
   for (const pingEvent of pastPings) {
-    console.log('Ping event:', pingEvent.transactionHash, pingEvent.blockNumber);
+    console.log(
+      'Ping event:',
+      pingEvent.transactionHash, pingEvent.blockNumber
+    );
 
     const pongExists = pastPongs.some((pongEvent) => {
       return pongEvent.data === pingEvent.transactionHash;
     });
+
     if (pongExists) {
-      console.log('Pong found for ping:', pingEvent.transactionHash, pingEvent.blockNumber);
+      console.log(
+        'Pong found for ping:',
+        pingEvent.transactionHash, pingEvent.blockNumber
+      );
     } else {
       console.warn('Pong not found for ping:', pingEvent.transactionHash);
       await sendPongWithRetry(pingEvent.transactionHash, 3);
@@ -64,21 +72,10 @@ async function fetchPastPingEvents(contract: ethers.Contract, fromBlock: number)
   }
 }
 
-async function main() {
+export async function sendPongWithRetry(
+  txHash: ethers.BytesLike, retries: number
+): Promise<boolean> {
 
-  // get up to date
-  console.log('Fetching past events...');
-  await fetchPastPingEvents(contract, 8823865);
-  // listen for new events
-  console.log('Listening for events...');
-  contract.on('Ping', async (eventPayload: ethers.ContractEventPayload) => {
-    console.log('Event received: Ping');
-    console.log('Blocknumber:', eventPayload.log.blockNumber);
-    console.log('TransactionHash:', eventPayload.log.transactionHash);
-    await sendPongWithRetry(eventPayload.log.transactionHash, 3);
-  });
-}
-async function sendPongWithRetry(txHash: ethers.BytesLike, retries: number): Promise<boolean> {
   for (let attempt = 1; attempt <= retries; attempt++) {
     console.log(`Attempt ${attempt}`);
     const success = await sendPong(txHash);
@@ -90,7 +87,11 @@ async function sendPongWithRetry(txHash: ethers.BytesLike, retries: number): Pro
   console.error('All attempts to send pong have failed');
   return false;
 }
-async function sendPong(txHash: ethers.BytesLike): Promise<boolean> {
+
+export async function sendPong(
+  txHash: ethers.BytesLike
+): Promise<boolean> {
+
   try {
     const tx = await wallet.sendTransaction({
       to: smartContractAddress,
@@ -104,7 +105,28 @@ async function sendPong(txHash: ethers.BytesLike): Promise<boolean> {
   }
 }
 
-main().catch((error) => {
-  console.error('Error:', error);
-});
-process.stdin.resume();
+async function main() {
+  // listen for new events
+  console.log('Listening for events...');
+  contract.on(
+    'Ping',
+    async (eventPayload: ethers.ContractEventPayload) => {
+      console.log('Event received: Ping');
+      console.log('Blocknumber:', eventPayload.log.blockNumber);
+      console.log('TransactionHash:', eventPayload.log.transactionHash);
+      await sendPongWithRetry(eventPayload.log.transactionHash, 3);
+    }
+  );
+
+  // also look at potentially missed events
+  console.log('Fetching past events...');
+  await fetchPastPingEvents(contract, 8823865);
+}
+
+if (process.env.NODE_ENV !== 'test') {
+  main().catch((error) => {
+    console.error('Error:', error);
+  });
+  process.stdin.resume();
+}
+
